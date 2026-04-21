@@ -16,7 +16,8 @@ logging.basicConfig(level=logging.INFO)
 URL_RE = re.compile(
     r"(?:https?://|www\.)[^\s\"'<>]+"
     r"|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\."
-    r"(?:com|net|org|io|co|info|biz|ru|xyz|top|click|link|ly|me|tv|cc|tk|ml|ga|cf|gq)"
+    r"(?:co\.il|org\.il|gov\.il|net\.il|ac\.il|muni\.il"
+    r"|com|net|org|io|co|info|biz|ru|xyz|top|click|link|ly|me|tv|cc|tk|ml|ga|cf|gq)"
     r"(?:/[^\s\"'<>]*)?)"
 )
 
