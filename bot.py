@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 import cache
 from config import TELEGRAM_TOKEN
-from analyzer.url_checker import vt_scan, urlscan_scan, unshorten_url, is_shortener, google_safe_browsing, phishtank_check, openphish_check, abuseipdb_check
+from analyzer.url_checker import vt_scan, urlscan_scan, unshorten_url, is_shortener, google_safe_browsing, phishtank_check, openphish_check, abuseipdb_check, certil_check
 from analyzer.domain_intel import check_lookalike, check_domain_age, check_heuristics
 from analyzer.ocr import extract_urls_from_image
 from translator import get_verdict
@@ -39,20 +39,24 @@ async def analyze_url(url: str) -> str:
     final_url = await unshorten_url(url) if shortened else url
     scan_target = final_url if final_url != url else url
 
-    # Wave 1: fast checks (~1-2s each)
-    gsb, pt, op, abuse = await asyncio.gather(
+    # Phase 0: pure-CPU checks — 0ms, no I/O
+    lookalike  = check_lookalike(scan_target)
+    heuristics = check_heuristics(scan_target)
+
+    # Wave 1: fast network checks (~1-2s each)
+    gsb, pt, op, abuse, certil = await asyncio.gather(
         google_safe_browsing(scan_target),
         phishtank_check(scan_target),
         openphish_check(scan_target),
         abuseipdb_check(scan_target),
+        certil_check(scan_target),
     )
-    lookalike  = check_lookalike(scan_target)
-    heuristics = check_heuristics(scan_target)
 
     confirmed_threat = (
         (gsb.get("available") and gsb.get("threat_found"))
         or (pt.get("available") and pt.get("verified"))
         or (op.get("available") and op.get("threat_found"))
+        or (certil.get("available") and certil.get("threat_found"))
     )
 
     if confirmed_threat:
@@ -69,7 +73,16 @@ async def analyze_url(url: str) -> str:
         )
 
     domain_info = {**lookalike, **age, **heuristics}
-    return get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, final_url=final_url, was_shortened=shortened)
+    return get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, certil=certil, final_url=final_url, was_shortened=shortened)
+
+
+async def _prewarm_feeds(app=None):
+    """Populate OpenPhish cache before first user scan."""
+    try:
+        await openphish_check("https://example.com")
+        logging.info("OpenPhish feed pre-warmed.")
+    except Exception as e:
+        logging.warning(f"OpenPhish prewarm failed (non-fatal): {e}")
 
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -125,7 +138,7 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def main():
     cache.init_db()
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(_prewarm_feeds).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

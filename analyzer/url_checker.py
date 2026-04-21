@@ -6,12 +6,15 @@ import httpx
 from config import VIRUSTOTAL_KEY, URLSCAN_KEY, GOOGLE_SAFE_BROWSING_KEY, PHISHTANK_KEY, ABUSEIPDB_KEY
 import cache
 
-VT_BASE       = "https://www.virustotal.com/api/v3"
-US_BASE       = "https://urlscan.io/api/v1"
-GSB_BASE      = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+VT_BASE        = "https://www.virustotal.com/api/v3"
+US_BASE        = "https://urlscan.io/api/v1"
+GSB_BASE       = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 PHISHTANK_BASE = "https://checkurl.phishtank.com/checkurl/"
 OPENPHISH_FEED = "https://openphish.com/feed.txt"
 ABUSEIPDB_BASE = "https://api.abuseipdb.com/api/v2/check"
+
+GSB_CLEAN_TTL  = 900    # 15 min — newly-listed URLs must not be served stale clean
+GSB_THREAT_TTL = 86400  # 24 h  — confirmed threats are stable
 
 SHORTENERS = {
     # גלובליים
@@ -24,6 +27,8 @@ SHORTENERS = {
     "t.me",         # Telegram links
     "forms.gle",    # Google Forms — משמש לפישינג
     "taplink.cc",
+    # נוספים — ישראל וגלובלי
+    "bit.do", "t2m.io", "short.gy", "v.ht",
 }
 
 
@@ -69,11 +74,25 @@ async def vt_scan(url: str) -> dict:
         r = await client.get(f"{VT_BASE}/urls/{url_id}", headers=_vt_headers())
 
         if r.status_code == 404:
-            sub = await client.post(f"{VT_BASE}/urls", headers=_vt_headers(), data={"url": url})
+            sub = await client.post(
+                f"{VT_BASE}/urls", headers=_vt_headers(), data={"url": url}
+            )
             analysis_id = sub.json()["data"]["id"]
-            await asyncio.sleep(15)
-            r = await client.get(f"{VT_BASE}/analyses/{analysis_id}", headers=_vt_headers())
-            stats = r.json()["data"]["attributes"]["stats"]
+            stats = None
+            for wait in (5, 8, 12):
+                await asyncio.sleep(wait)
+                poll = await client.get(
+                    f"{VT_BASE}/analyses/{analysis_id}",
+                    headers=_vt_headers(),
+                    timeout=10,
+                )
+                if poll.status_code == 200:
+                    attrs = poll.json()["data"]["attributes"]
+                    if attrs.get("status") == "completed":
+                        stats = attrs["stats"]
+                        break
+            if stats is None:
+                return {"malicious": 0, "suspicious": 0, "harmless": 0, "undetected": 0}
         else:
             stats = r.json()["data"]["attributes"]["last_analysis_stats"]
 
@@ -100,10 +119,10 @@ async def urlscan_scan(url: str) -> dict:
             return {"error": sub.text}
 
         scan_id = sub.json()["uuid"]
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
 
-        for _ in range(6):
-            res = await client.get(f"{US_BASE}/result/{scan_id}/")
+        for _ in range(4):
+            res = await client.get(f"{US_BASE}/result/{scan_id}/", timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 result = {
@@ -149,7 +168,8 @@ async def google_safe_browsing(url: str) -> dict:
     except Exception as e:
         result = {"available": True, "threat_found": False, "error": str(e)}
 
-    cache.set(f"gsb:{url}", result)
+    ttl = GSB_THREAT_TTL if result.get("threat_found") else GSB_CLEAN_TTL
+    cache.set(f"gsb:{url}", result, ttl=ttl)
     return result
 
 
@@ -201,6 +221,15 @@ async def openphish_check(url: str) -> dict:
     return {"available": True, "threat_found": found}
 
 
+async def certil_check(url: str) -> dict:
+    """CERT-IL phishing feed check — stub pending official machine-readable feed.
+
+    Replace the body with a fetch+cache pattern (identical to openphish_check)
+    once cert.gov.il publishes a stable feed URL.
+    """
+    return {"available": False, "threat_found": False}
+
+
 async def abuseipdb_check(url: str) -> dict:
     if not ABUSEIPDB_KEY:
         return {"available": False}
@@ -211,8 +240,11 @@ async def abuseipdb_check(url: str) -> dict:
         return cached
 
     try:
-        ip = await asyncio.to_thread(socket.gethostbyname, domain)
-    except socket.gaierror:
+        ip = await asyncio.wait_for(
+            asyncio.to_thread(socket.gethostbyname, domain),
+            timeout=2.0,
+        )
+    except (socket.gaierror, asyncio.TimeoutError):
         return {"available": True, "abuse_score": 0, "error": "dns_resolution_failed"}
 
     try:

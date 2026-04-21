@@ -24,7 +24,7 @@ SYSTEM = """אתה מומחה אבטחת סייבר ישראלי שתפקידו 
 
 def get_verdict(url: str, vt: dict, us: dict, domain: dict,
                 gsb: dict = None, pt: dict = None, op: dict = None, abuse: dict = None,
-                final_url: str = None, was_shortened: bool = False) -> str:
+                certil: dict = None, final_url: str = None, was_shortened: bool = False) -> str:
     shortener_note = ""
     if was_shortened:
         shortener_note = f"\n⚠️ קישור מקוצר! הקישור המקורי הוביל ל: {final_url or 'לא ידוע'}"
@@ -45,6 +45,10 @@ def get_verdict(url: str, vt: dict, us: dict, domain: dict,
     if op and op.get("available"):
         if op.get("threat_found"):
             op_line = "נמצא ברשימת פישינג של OpenPhish ⚠️"
+
+    certil_line = None
+    if certil and certil.get("available") and certil.get("threat_found"):
+        certil_line = "נמצא בהתרעות CERT-IL 🚨"
 
     abuse_line = None
     if abuse and abuse.get("available") and "error" not in abuse:
@@ -74,6 +78,8 @@ def get_verdict(url: str, vt: dict, us: dict, domain: dict,
         threat_sources.append(f"OpenPhish: {op_line}")
     if abuse_line:
         threat_sources.append(f"AbuseIPDB: {abuse_line}")
+    if certil_line:
+        threat_sources.append(f"CERT-IL: {certil_line}")
 
     # Domain-level risk signals
     domain_flags = []

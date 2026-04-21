@@ -2,6 +2,7 @@ import asyncio
 import re
 import whois
 from datetime import datetime, timezone
+from urllib.parse import unquote
 
 BRANDS = [
     # בנקים וכרטיסי אשראי
@@ -82,6 +83,50 @@ SUSPICIOUS_TLDS = {
     ".stream", ".gdn", ".men", ".work",
 }
 
+# Israeli second-level domains that form 3-part TLDs: <brand>.<sld>.il
+_IL_SLD = {"co", "org", "net", "gov", "ac", "muni"}
+
+# Exact registered roots that contain short brand tokens but are legitimate
+_BRAND_DOMAIN_WHITELIST = {
+    "bit.co.il",
+    "max.co.il",
+    "hot.co.il",
+    "partner.co.il",
+}
+
+# Weighted signal strengths — higher = more confident phishing indicator
+_HEURISTIC_WEIGHTS = {
+    "ip":        5,  # IP address as domain (near-zero legitimate consumer use)
+    "subdomain": 4,  # brand name in subdomain but not root
+    "coil":      4,  # .co.il- SMS phishing pattern
+    "tld":       3,  # suspicious free TLD
+    "hyphens":   2,  # excessive hyphens (>=3)
+    "subs":      2,  # excessive subdomains (>=4 dots)
+    "longname":  1,  # very long domain root
+    "keyword":   1,  # per suspicious keyword (capped at 3)
+}
+
+
+def _registered_domain(domain: str) -> tuple[str, str]:
+    """Return (subdomain_prefix, registered_root) with correct .co.il handling.
+
+    Examples:
+        "www.bankhapoalim.co.il" → ("www", "bankhapoalim.co.il")
+        "paypal.evil.co.il"      → ("paypal", "evil.co.il")
+        "www.google.com"         → ("www", "google.com")
+        "misim.gov.il"           → ("", "misim.gov.il")
+    """
+    parts = domain.lower().split(".")
+    if len(parts) >= 3 and parts[-2] in _IL_SLD and parts[-1] == "il":
+        root      = ".".join(parts[-3:])       # brand.co.il
+        subdomain = ".".join(parts[:-3])        # everything left of brand
+    elif len(parts) >= 2:
+        root      = ".".join(parts[-2:])        # brand.com
+        subdomain = ".".join(parts[:-2])
+    else:
+        root, subdomain = domain, ""
+    return subdomain, root
+
 
 def _normalize(s: str) -> str:
     s = s.lower()
@@ -97,17 +142,32 @@ def extract_domain(url: str) -> str:
 
 def check_lookalike(url: str) -> dict:
     domain = extract_domain(url)
-    norm = _normalize(domain)
-    hits = [b for b in BRANDS if b in norm and b not in domain]
+
+    # Fast-pass: known-legitimate .gov.il subdomains and exact whitelist entries
+    _, root = _registered_domain(domain)
+    if root in _BRAND_DOMAIN_WHITELIST or root.endswith(".gov.il"):
+        return {"lookalike": False, "brands": []}
+
+    # Decode Punycode/IDN so homoglyph xn-- domains are normalized before matching
+    try:
+        domain_decoded = domain.encode("ascii").decode("idna")
+    except (UnicodeError, UnicodeDecodeError):
+        domain_decoded = domain
+
+    norm = _normalize(domain_decoded)
+    # Require token length >= 4 to avoid noise from "bit", "max", "hot", "gov"
+    hits = [b for b in BRANDS if len(b) >= 4 and b in norm and b not in domain_decoded]
     return {"lookalike": bool(hits), "brands": hits}
 
 
 async def check_domain_age(url: str) -> dict:
     domain = extract_domain(url)
-    parts = domain.split(".")
-    root = ".".join(parts[-2:]) if len(parts) >= 2 else domain
+    _, root = _registered_domain(domain)
     try:
-        w = await asyncio.to_thread(whois.whois, root)
+        w = await asyncio.wait_for(
+            asyncio.to_thread(whois.whois, root),
+            timeout=8.0,
+        )
         created = w.creation_date
         if isinstance(created, list):
             created = created[0]
@@ -116,6 +176,8 @@ async def check_domain_age(url: str) -> dict:
                 created = created.replace(tzinfo=timezone.utc)
             age_days = (datetime.now(timezone.utc) - created).days
             return {"age_days": age_days, "new_domain": age_days < 30}
+    except asyncio.TimeoutError:
+        pass
     except Exception:
         pass
     return {"age_days": None, "new_domain": None}
@@ -123,50 +185,53 @@ async def check_domain_age(url: str) -> dict:
 
 def check_heuristics(url: str) -> dict:
     domain = extract_domain(url)
-    flags = []
+    flags  = []
+    score  = 0
+
+    def _add(label: str, weight_key: str) -> None:
+        nonlocal score
+        flags.append(label)
+        score += _HEURISTIC_WEIGHTS[weight_key]
 
     # IP address as domain
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", domain):
-        flags.append("כתובת IP במקום דומיין")
+        _add("כתובת IP במקום דומיין", "ip")
 
-    # excessive subdomains — threshold 4 to avoid flagging www.brand.co.il
+    # Excessive subdomains — threshold 4 to avoid flagging www.brand.co.il (3 dots)
     if domain.count(".") >= 4:
-        flags.append("יותר מדי תתי-דומיינים")
+        _add("יותר מדי תתי-דומיינים", "subs")
 
-    # suspicious TLD
+    # Suspicious TLD
     for tld in SUSPICIOUS_TLDS:
         if domain.endswith(tld):
-            flags.append(f"סיומת דומיין חשודה ({tld})")
+            _add(f"סיומת דומיין חשודה ({tld})", "tld")
             break
 
-    # long domain name
-    root = domain.split(".")[0]
-    if len(root) > 30:
-        flags.append("שם דומיין ארוך מאוד")
+    # Long domain name (first label only)
+    first_label = domain.split(".")[0]
+    if len(first_label) > 30:
+        _add("שם דומיין ארוך מאוד", "longname")
 
-    # multiple hyphens
+    # Multiple hyphens
     if domain.count("-") >= 3:
-        flags.append("יותר מדי מקפים בדומיין")
+        _add("יותר מדי מקפים בדומיין", "hyphens")
 
-    # suspicious keywords in URL — each hit is its own flag for accurate scoring
-    url_lower = url.lower()
-    keyword_hits = [k for k in SUSPICIOUS_KEYWORDS if k in url_lower]
+    # Suspicious keywords — unquote so Hebrew %D7%... paths match
+    url_decoded   = unquote(url).lower()
+    keyword_hits  = [k for k in SUSPICIOUS_KEYWORDS if k in url_decoded]
     for kw in keyword_hits[:3]:
-        flags.append(f"מילת מפתח חשודה: {kw}")
+        _add(f"מילת מפתח חשודה: {kw}", "keyword")
 
-    # brand name in subdomain but not root (classic phishing pattern)
-    parts = domain.split(".")
-    if len(parts) >= 3:
-        subdomain = ".".join(parts[:-2])
-        root_domain = parts[-2]
+    # Brand name in subdomain but not in registered root (classic phishing)
+    subdomain_part, root_part = _registered_domain(domain)
+    if subdomain_part:
         for brand in BRANDS:
-            if brand in subdomain and brand not in root_domain:
-                flags.append(f"מותג '{brand}' מופיע בתת-דומיין בלבד — חשוד מאוד")
+            if len(brand) >= 4 and brand in subdomain_part and brand not in root_part:
+                _add(f"מותג '{brand}' מופיע בתת-דומיין בלבד — חשוד מאוד", "subdomain")
                 break
 
-    # Israeli SMS phishing pattern: brand.co.il-randomdomain.com
-    # e.g. israelpost.co.il-track.xyz or btl.co.il-update.net
+    # Israeli SMS phishing pattern: brand.co.il-randomdomain.xyz
     if re.search(r"\.co\.il[-.]", domain):
-        flags.append("דומיין מחקה כתובת ישראלית (.co.il) — תבנית פישינג נפוצה ב-SMS")
+        _add("דומיין מחקה כתובת ישראלית (.co.il) — תבנית פישינג נפוצה ב-SMS", "coil")
 
-    return {"heuristic_flags": flags, "heuristic_score": len(flags)}
+    return {"heuristic_flags": flags, "heuristic_score": score}

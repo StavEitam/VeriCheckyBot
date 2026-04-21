@@ -3,31 +3,41 @@ import json
 import time
 
 DB_PATH = "veri_cache.db"
-TTL = 3600  # 1 hour
+TTL = 3600  # 1 hour default
 
-def _conn():
-    return sqlite3.connect(DB_PATH)
+_db: sqlite3.Connection | None = None
+
+
+def _conn() -> sqlite3.Connection:
+    global _db
+    if _db is None:
+        _db = sqlite3.connect(DB_PATH, check_same_thread=False)
+    return _db
+
 
 def init_db():
-    with _conn() as c:
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS cache (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                expires_at INTEGER
-            )
-        """)
+    _conn().execute("""
+        CREATE TABLE IF NOT EXISTS cache (
+            key        TEXT PRIMARY KEY,
+            value      TEXT,
+            expires_at INTEGER
+        )
+    """)
+    _conn().commit()
+
 
 def get(key: str):
-    with _conn() as c:
-        row = c.execute("SELECT value, expires_at FROM cache WHERE key=?", (key,)).fetchone()
+    row = _conn().execute(
+        "SELECT value, expires_at FROM cache WHERE key=?", (key,)
+    ).fetchone()
     if row and row[1] > int(time.time()):
         return json.loads(row[0])
     return None
 
+
 def set(key: str, value, ttl: int = TTL):
-    with _conn() as c:
-        c.execute(
-            "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?,?,?)",
-            (key, json.dumps(value), int(time.time()) + ttl)
-        )
+    _conn().execute(
+        "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?,?,?)",
+        (key, json.dumps(value), int(time.time()) + ttl),
+    )
+    _conn().commit()

@@ -42,9 +42,9 @@ def heuristic_verdict(url: str) -> str:
     score      = heuristics["heuristic_score"]
     has_brand  = lookalike["lookalike"]
 
-    if score >= 3 or (score >= 2 and has_brand):
+    if score >= 6 or has_brand:
         return "dangerous"
-    if score >= 2 or has_brand:
+    if score >= 4:
         return "suspicious"
     return "clean"
 
