@@ -14,15 +14,22 @@ OPENPHISH_FEED = "https://openphish.com/feed.txt"
 ABUSEIPDB_BASE = "https://api.abuseipdb.com/api/v2/check"
 
 SHORTENERS = {
+    # גלובליים
     "t.co", "bit.ly", "goo.gl", "tinyurl.com", "ow.ly", "buff.ly",
     "shorturl.at", "is.gd", "rb.gy", "cutt.ly", "tiny.cc", "bl.ink",
-    "rebrand.ly", "short.io", "link.me",
+    "rebrand.ly", "short.io", "link.me", "v.gd", "s.id", "qr.io",
+    # נפוצים בישראל
+    "did.li",       # shortener נפוץ ב-SMS ישראלי
+    "wa.me",        # WhatsApp links — יעד לא ידוע
+    "t.me",         # Telegram links
+    "forms.gle",    # Google Forms — משמש לפישינג
+    "taplink.cc",
 }
 
 
 def is_shortener(url: str) -> bool:
     try:
-        domain = url.split("/")[2].lower().lstrip("www.")
+        domain = url.split("/")[2].lower().removeprefix("www.")
         return domain in SHORTENERS
     except Exception:
         return False

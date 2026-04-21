@@ -14,11 +14,13 @@ from translator import get_verdict
 logging.basicConfig(level=logging.INFO)
 
 URL_RE = re.compile(
-    r"(?:https?://|www\.)[^\s\"'<>]+"
+    r"(?:https?://|www\.)[^\s\"'<>]+"                          # Branch 1: has protocol/www
     r"|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\."
     r"(?:co\.il|org\.il|gov\.il|net\.il|ac\.il|muni\.il"
     r"|com|net|org|io|co|info|biz|ru|xyz|top|click|link|ly|me|tv|cc|tk|ml|ga|cf|gq)"
-    r"(?:/[^\s\"'<>]*)?)"
+    r"(?:/[^\s\"'<>]*)?)+"                                     # Branch 2: known TLD list
+    r"|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)"
+    r"[a-zA-Z]{2,8}/[^\s\"'<>]+"                              # Branch 3: any TLD but MUST have path
 )
 
 
