@@ -7,23 +7,42 @@ BRANDS = [
     # בנקים וכרטיסי אשראי
     "paypal", "visa", "mastercard",
     "bankhapoalim", "bankleumi", "hapoalim", "leumi", "poalim",
-    "mizrahi", "discount", "fibi", "otzar", "benleumi",
+    "mizrahi", "mizrahitefahot", "discount", "bankdiscount",
+    "fibi", "otzar", "benleumi", "firstinternational",
     "isracard", "max", "cal", "bit", "pepper",
 
+    # ביטוח
+    "clal", "harel", "menora", "migdal", "phoenix",
+    "directinsurance", "direct-insurance", "ayalon",
+    "shiloah", "karnit",
+
+    # קופות חולים ובריאות
+    "clalit", "maccabi", "meuhedet", "leumit",
+
+    # דואר ומשלוחים
+    "israelpost", "daka90", "israeldakdak",
+    "ups", "fedex", "dhl",
+
     # ממשלה ומוסדות ציבוריים
-    "gov", "mof", "misim", "mas-hachnasa",         # משרד האוצר / מס הכנסה
-    "btl", "bituahleumi", "bitouahleumi",           # ביטוח לאומי
-    "nii",                                          # National Insurance Institute
-    "moked106",                                     # עיריות / מוקד 106
-    "arnona",                                       # ארנונה
-    "iriya", "municipality",                        # עיריות
-    "kvish6", "iroads", "netivei-israel",           # כביש 6 / נתיבי ישראל
-    "pazi", "sonol", "delek", "paz",                # דלק / תחנות דלק
+    "gov", "mof", "misim", "mas-hachnasa",
+    "btl", "bituahleumi", "bitouahleumi",
+    "nii",
+    "moked106",
+    "arnona",
+    "iriya", "municipality",
+    "kvish6", "iroads", "netivei-israel",
+    "pazi", "sonol", "delek", "paz",
+    "misrad-habriyut", "misradhabriyut",
+    "misrad-hachinuch", "rama",
 
     # חברות תשתית ותקשורת
-    "bezek", "bezeq", "partner", "cellcom", "hot",
+    "bezek", "bezeq", "partner", "cellcom", "hot", "yes",
     "012", "013", "019", "ravtech",
-    "iec", "hagihon", "mekorot",                    # חשמל / מים
+    "iec", "hagihon", "mekorot",
+
+    # קמעונאות
+    "shufersal", "ramilevi", "ramilevy", "victory",
+    "superpharm", "super-pharm", "ksp", "ivory",
 
     # שירותים ממשלתיים דיגיטליים
     "gov-il", "mydigital", "digitalil",
@@ -33,6 +52,7 @@ BRANDS = [
     # גלובליים נפוצים
     "apple", "google", "microsoft", "amazon",
     "facebook", "instagram", "netflix", "whatsapp",
+    "tiktok", "spotify", "telegram",
 ]
 
 LOOKALIKE_MAP = {
@@ -46,11 +66,14 @@ SUSPICIOUS_KEYWORDS = [
     "account", "update", "confirm", "banking", "wallet", "password",
     "credential", "suspend", "urgent", "alert", "validate", "authenticate",
     "payment", "invoice", "debt", "fine", "penalty", "overdue",
-    # עברית
+    "tracking", "delivery", "parcel", "package", "shipment",
+    # עברית (URL-encoded ו-plain)
     "כניסה", "אימות", "חשבון", "בנק", "עדכון",
     "תשלום", "חוב", "קנס", "דוח", "הוראת-קבע", "הוראת קבע",
     "ביטוח-לאומי", "מס-הכנסה", "ארנונה", "כביש6", "כביש-6",
     "עיריית", "רשות", "משרד", "ממשלה",
+    "חבילה", "משלוח", "מכס", "דואר", "איסוף",
+    "החזר", "זיכוי", "פיצוי", "מענק",
 ]
 
 SUSPICIOUS_TLDS = {
@@ -140,5 +163,10 @@ def check_heuristics(url: str) -> dict:
             if brand in subdomain and brand not in root_domain:
                 flags.append(f"מותג '{brand}' מופיע בתת-דומיין בלבד — חשוד מאוד")
                 break
+
+    # Israeli SMS phishing pattern: brand.co.il-randomdomain.com
+    # e.g. israelpost.co.il-track.xyz or btl.co.il-update.net
+    if re.search(r"\.co\.il[-.]", domain):
+        flags.append("דומיין מחקה כתובת ישראלית (.co.il) — תבנית פישינג נפוצה ב-SMS")
 
     return {"heuristic_flags": flags, "heuristic_score": len(flags)}
