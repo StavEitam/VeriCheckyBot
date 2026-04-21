@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import re
+import socket
 import httpx
 from config import VIRUSTOTAL_KEY, URLSCAN_KEY, GOOGLE_SAFE_BROWSING_KEY, PHISHTANK_KEY, ABUSEIPDB_KEY
 import cache
@@ -203,10 +204,15 @@ async def abuseipdb_check(url: str) -> dict:
         return cached
 
     try:
+        ip = await asyncio.to_thread(socket.gethostbyname, domain)
+    except socket.gaierror:
+        return {"available": True, "abuse_score": 0, "error": "dns_resolution_failed"}
+
+    try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
                 ABUSEIPDB_BASE,
-                params={"ipAddress": domain, "maxAgeInDays": 90, "verbose": ""},
+                params={"ipAddress": ip, "maxAgeInDays": 90, "verbose": ""},
                 headers={"Key": ABUSEIPDB_KEY, "Accept": "application/json"},
             )
         data = r.json().get("data", {})
@@ -214,6 +220,7 @@ async def abuseipdb_check(url: str) -> dict:
             "available": True,
             "abuse_score": data.get("abuseConfidenceScore", 0),
             "total_reports": data.get("totalReports", 0),
+            "ip": ip,
             "domain": data.get("domain", domain),
             "is_whitelisted": data.get("isWhitelisted", False),
         }
