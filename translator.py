@@ -15,9 +15,10 @@ SYSTEM = """אתה מומחה אבטחת סייבר ישראלי שתפקידו 
 פורמט התשובה:
 🔗 **יעד הקישור:** [הדומיין הסופי שנמצא, או "לא ידוע"]
 ⚠️ **רמת סיכון:** גבוהה / בינונית / לא ניתן לאמת
-📋 **ממצאים:** [2-3 שורות קצרות עם מה שנמצא]
-🛑 **המלצה:** [מה לעשות — ספציפי וברור]
+📋 **ממצאים:** [רשום כאן רק ממצאים שליליים/חשודים שנמצאו. אם מקור מסוים לא מצא כלום — אל תזכיר אותו בכלל. המשתמש לא צריך לדעת איפה לא נמצא איום — רק איפה נמצא]
+🛑 **המלצה:** [מה לעשות — ספציפי וברור. אם לא זוהה שום איום בשום מקור — חייב לציין: "אם הכניסה לאתר אינה הכרחית, עדיף להימנע"]
 
+חוק קריטי לגבי ממצאים: אל תכתוב "לא נמצא ב-X" או "X לא זיהה איום" — שתיקה על מקור נקי היא הדרך הנכונה. רשום רק מה שנמצא בפועל.
 אם הקישור הוא מקוצר ולא ניתן לאמת את היעד הסופי, כתוב זאת מפורשות."""
 
 
@@ -28,62 +29,80 @@ def get_verdict(url: str, vt: dict, us: dict, domain: dict,
     if was_shortened:
         shortener_note = f"\n⚠️ קישור מקוצר! הקישור המקורי הוביל ל: {final_url or 'לא ידוע'}"
 
-    gsb_line = "לא זמין (ללא מפתח API)"
+    gsb_line = None
     if gsb and gsb.get("available"):
-        gsb_line = f"איום זוהה: {', '.join(gsb.get('threat_types', []))}" if gsb.get("threat_found") else "לא נמצא באיומים ידועים"
+        if gsb.get("threat_found"):
+            gsb_line = f"איום זוהה: {', '.join(gsb.get('threat_types', []))}"
 
-    pt_line = "לא זמין (ללא מפתח API)"
+    pt_line = None
     if pt and pt.get("available"):
-        pt_line = "נמצא במאגר פישינג מאומת ✓" if pt.get("verified") else ("נמצא במאגר פישינג" if pt.get("in_database") else "לא נמצא במאגר")
+        if pt.get("verified"):
+            pt_line = "נמצא במאגר פישינג מאומת ✓"
+        elif pt.get("in_database"):
+            pt_line = "נמצא במאגר פישינג (לא מאומת)"
 
-    op_line = "לא זמין"
+    op_line = None
     if op and op.get("available"):
-        op_line = "נמצא ברשימת פישינג של OpenPhish ⚠️" if op.get("threat_found") else "לא נמצא ברשימה"
+        if op.get("threat_found"):
+            op_line = "נמצא ברשימת פישינג של OpenPhish ⚠️"
 
-    abuse_line = "לא זמין (ללא מפתח API)"
-    if abuse and abuse.get("available"):
+    abuse_line = None
+    if abuse and abuse.get("available") and "error" not in abuse:
         score = abuse.get("abuse_score", 0)
         reports = abuse.get("total_reports", 0)
-        if "error" in abuse:
-            abuse_line = "שגיאה בבדיקה"
-        else:
+        if score > 0 or reports > 0:
             abuse_line = f"ציון ניצול לרעה: {score}/100 ({reports} דיווחים)"
 
     heuristic_flags = domain.get("heuristic_flags", [])
-    heuristics_line = "\n".join(f"  - {f}" for f in heuristic_flags) if heuristic_flags else "  אין דגלים"
+
+    # Build threat-source lines — only include sources that found something
+    threat_sources = []
+    vt_malicious = vt.get('malicious', 0) or 0
+    vt_suspicious = vt.get('suspicious', 0) or 0
+    if vt_malicious > 0 or vt_suspicious > 0:
+        threat_sources.append(f"VirusTotal: {vt_malicious} מנועים זדוניים, {vt_suspicious} חשודים")
+    us_malicious = us.get('malicious')
+    us_score = us.get('score', 0) or 0
+    if us_malicious or us_score >= 50:
+        tags = ', '.join(us.get('tags', [])) or 'אין'
+        threat_sources.append(f"URLScan: סומן כזדוני={us_malicious}, ציון={us_score}/100, תגיות={tags}")
+    if gsb_line:
+        threat_sources.append(f"Google Safe Browsing: {gsb_line}")
+    if pt_line:
+        threat_sources.append(f"PhishTank: {pt_line}")
+    if op_line:
+        threat_sources.append(f"OpenPhish: {op_line}")
+    if abuse_line:
+        threat_sources.append(f"AbuseIPDB: {abuse_line}")
+
+    # Domain-level risk signals
+    domain_flags = []
+    if domain.get('new_domain'):
+        domain_flags.append(f"דומיין חדש מאוד — גיל: {domain.get('age_days', 'לא ידוע')} ימים")
+    if domain.get('lookalike'):
+        brands = ', '.join(domain.get('brands', []))
+        domain_flags.append(f"חיקוי מותג ידוע: {brands}")
+    if heuristic_flags:
+        domain_flags.append(f"דגלים היוריסטיים ({domain.get('heuristic_score', 0)}): " + "; ".join(heuristic_flags))
+
+    all_findings = threat_sources + domain_flags
+    findings_block = "\n".join(f"- {f}" for f in all_findings) if all_findings else "לא זוהו ממצאים שליליים בשום מקור."
+
+    no_threats_found = not all_findings
 
     prompt = f"""
 URL מקורי: {url}
 {shortener_note}
 URL סופי לאחר פתיחה: {final_url or url}
 
-VirusTotal (על ה-URL הסופי):
-- זדוני: {vt.get('malicious', '?')} מנועי סריקה
-- חשוד: {vt.get('suspicious', '?')} מנועי סריקה
-- נקי: {vt.get('harmless', '?')} מנועי סריקה
+ממצאים שליליים שנמצאו (בלבד):
+{findings_block}
 
-URLScan:
-- URL סופי שזוהה: {us.get('final_url', final_url or url)}
-- סומן כזדוני: {us.get('malicious', '?')}
-- ציון סיכון: {us.get('score', '?')}/100
-- תגיות: {', '.join(us.get('tags', [])) or 'אין'}
-
-Google Safe Browsing: {gsb_line}
-PhishTank: {pt_line}
-OpenPhish: {op_line}
-AbuseIPDB: {abuse_line}
-
-מידע דומיין:
-- גיל דומיין (ימים): {domain.get('age_days', 'לא ידוע')}
-- דומיין חדש מאוד (<30 יום): {domain.get('new_domain', 'לא ידוע')}
-- חיקוי מותג ידוע: {domain.get('lookalike', False)}
-- מותגים שמחקים: {', '.join(domain.get('brands', [])) or 'אין'}
-
-ניתוח היוריסטי ({domain.get('heuristic_score', 0)} דגלים):
-{heuristics_line}
+{"⚠️ שים לב: לא זוהו איומים ידועים בשום מקור. חובה לציין בהמלצה שאם הכניסה אינה הכרחית — עדיף להימנע." if no_threats_found else ""}
 
 ספק פסיקה בעברית לפי הפורמט שקיבלת.
 זכור: עדיף להזהיר יתר על המידה. לעולם אל תאמר "בטוח ללחוץ".
+כלל קריטי: אל תזכיר מקורות שלא מצאו כלום — רק מה שנמצא בפועל.
 """
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
