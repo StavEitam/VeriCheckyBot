@@ -37,17 +37,35 @@ async def analyze_url(url: str) -> str:
     final_url = await unshorten_url(url) if shortened else url
     scan_target = final_url if final_url != url else url
 
-    vt, us, gsb, pt, op, abuse, age = await asyncio.gather(
-        vt_scan(scan_target),
-        urlscan_scan(scan_target),
+    # Wave 1: fast checks (~1-2s each)
+    gsb, pt, op, abuse = await asyncio.gather(
         google_safe_browsing(scan_target),
         phishtank_check(scan_target),
         openphish_check(scan_target),
         abuseipdb_check(scan_target),
-        check_domain_age(scan_target),
     )
-    lookalike   = check_lookalike(scan_target)
-    heuristics  = check_heuristics(scan_target)
+    lookalike  = check_lookalike(scan_target)
+    heuristics = check_heuristics(scan_target)
+
+    confirmed_threat = (
+        (gsb.get("available") and gsb.get("threat_found"))
+        or (pt.get("available") and pt.get("verified"))
+        or (op.get("available") and op.get("threat_found"))
+    )
+
+    if confirmed_threat:
+        # Known bad — skip slow APIs, respond immediately
+        vt  = {"malicious": 0, "suspicious": 0, "harmless": 0, "undetected": 0}
+        us  = {}
+        age = {"age_days": None, "new_domain": None}
+    else:
+        # Wave 2: slow checks (15-70s) only when no confirmed threat
+        vt, us, age = await asyncio.gather(
+            vt_scan(scan_target),
+            urlscan_scan(scan_target),
+            check_domain_age(scan_target),
+        )
+
     domain_info = {**lookalike, **age, **heuristics}
     return get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, final_url=final_url, was_shortened=shortened)
 
