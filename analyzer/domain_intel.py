@@ -1,3 +1,4 @@
+import asyncio
 import re
 import whois
 from datetime import datetime, timezone
@@ -78,12 +79,12 @@ def check_lookalike(url: str) -> dict:
     return {"lookalike": bool(hits), "brands": hits}
 
 
-def check_domain_age(url: str) -> dict:
+async def check_domain_age(url: str) -> dict:
     domain = extract_domain(url)
     parts = domain.split(".")
     root = ".".join(parts[-2:]) if len(parts) >= 2 else domain
     try:
-        w = whois.whois(root)
+        w = await asyncio.to_thread(whois.whois, root)
         created = w.creation_date
         if isinstance(created, list):
             created = created[0]

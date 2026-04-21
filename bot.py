@@ -1,3 +1,4 @@
+import asyncio
 import re
 import logging
 from telegram import Update
@@ -32,18 +33,20 @@ def extract_urls(text: str) -> list[str]:
 
 async def analyze_url(url: str) -> str:
     shortened = is_shortener(url)
-    final_url = unshorten_url(url) if shortened else url
+    final_url = await unshorten_url(url) if shortened else url
     scan_target = final_url if final_url != url else url
 
-    vt      = vt_scan(scan_target)
-    us      = urlscan_scan(scan_target)
-    gsb     = google_safe_browsing(scan_target)
-    pt      = phishtank_check(scan_target)
-    op      = openphish_check(scan_target)
-    abuse   = abuseipdb_check(scan_target)
-    lookalike  = check_lookalike(scan_target)
-    age        = check_domain_age(scan_target)
-    heuristics = check_heuristics(scan_target)
+    vt, us, gsb, pt, op, abuse, age = await asyncio.gather(
+        vt_scan(scan_target),
+        urlscan_scan(scan_target),
+        google_safe_browsing(scan_target),
+        phishtank_check(scan_target),
+        openphish_check(scan_target),
+        abuseipdb_check(scan_target),
+        check_domain_age(scan_target),
+    )
+    lookalike   = check_lookalike(scan_target)
+    heuristics  = check_heuristics(scan_target)
     domain_info = {**lookalike, **age, **heuristics}
     return get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, final_url=final_url, was_shortened=shortened)
 

@@ -1,6 +1,6 @@
+import asyncio
 import base64
 import re
-import time
 import httpx
 from config import VIRUSTOTAL_KEY, URLSCAN_KEY, GOOGLE_SAFE_BROWSING_KEY, PHISHTANK_KEY, ABUSEIPDB_KEY
 import cache
@@ -27,15 +27,17 @@ def is_shortener(url: str) -> bool:
         return False
 
 
-def unshorten_url(url: str) -> str:
+async def unshorten_url(url: str) -> str:
     try:
-        r = httpx.head(url, follow_redirects=True, timeout=10)
-        final = str(r.url)
-        return final if final != url else url
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+            r = await client.head(url)
+            final = str(r.url)
+            return final if final != url else url
     except Exception:
         try:
-            r = httpx.get(url, follow_redirects=True, timeout=10)
-            return str(r.url)
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                r = await client.get(url)
+                return str(r.url)
         except Exception:
             return url
 
@@ -49,22 +51,23 @@ def _vt_headers():
     return {"x-apikey": VIRUSTOTAL_KEY}
 
 
-def vt_scan(url: str) -> dict:
+async def vt_scan(url: str) -> dict:
     cached = cache.get(f"vt:{url}")
     if cached:
         return cached
 
     url_id = base64.urlsafe_b64encode(url.encode()).rstrip(b"=").decode()
-    r = httpx.get(f"{VT_BASE}/urls/{url_id}", headers=_vt_headers(), timeout=15)
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{VT_BASE}/urls/{url_id}", headers=_vt_headers())
 
-    if r.status_code == 404:
-        sub = httpx.post(f"{VT_BASE}/urls", headers=_vt_headers(), data={"url": url}, timeout=15)
-        analysis_id = sub.json()["data"]["id"]
-        time.sleep(15)
-        r = httpx.get(f"{VT_BASE}/analyses/{analysis_id}", headers=_vt_headers(), timeout=15)
-        stats = r.json()["data"]["attributes"]["stats"]
-    else:
-        stats = r.json()["data"]["attributes"]["last_analysis_stats"]
+        if r.status_code == 404:
+            sub = await client.post(f"{VT_BASE}/urls", headers=_vt_headers(), data={"url": url})
+            analysis_id = sub.json()["data"]["id"]
+            await asyncio.sleep(15)
+            r = await client.get(f"{VT_BASE}/analyses/{analysis_id}", headers=_vt_headers())
+            stats = r.json()["data"]["attributes"]["stats"]
+        else:
+            stats = r.json()["data"]["attributes"]["last_analysis_stats"]
 
     result = {
         "malicious": stats.get("malicious", 0),
@@ -76,38 +79,39 @@ def vt_scan(url: str) -> dict:
     return result
 
 
-def urlscan_scan(url: str) -> dict:
+async def urlscan_scan(url: str) -> dict:
     cached = cache.get(f"us:{url}")
     if cached:
         return cached
 
     headers = {"API-Key": URLSCAN_KEY, "Content-Type": "application/json"}
-    sub = httpx.post(f"{US_BASE}/scan/", headers=headers, json={"url": url, "visibility": "unlisted"}, timeout=15)
+    async with httpx.AsyncClient(timeout=15) as client:
+        sub = await client.post(f"{US_BASE}/scan/", headers=headers, json={"url": url, "visibility": "unlisted"})
 
-    if sub.status_code not in (200, 201):
-        return {"error": sub.text}
+        if sub.status_code not in (200, 201):
+            return {"error": sub.text}
 
-    scan_id = sub.json()["uuid"]
-    time.sleep(10)
+        scan_id = sub.json()["uuid"]
+        await asyncio.sleep(10)
 
-    for _ in range(6):
-        res = httpx.get(f"{US_BASE}/result/{scan_id}/", timeout=15)
-        if res.status_code == 200:
-            data = res.json()
-            result = {
-                "final_url": data.get("page", {}).get("url", url),
-                "malicious": data.get("verdicts", {}).get("overall", {}).get("malicious", False),
-                "score": data.get("verdicts", {}).get("overall", {}).get("score", 0),
-                "tags": data.get("verdicts", {}).get("overall", {}).get("tags", []),
-            }
-            cache.set(f"us:{url}", result)
-            return result
-        time.sleep(10)
+        for _ in range(6):
+            res = await client.get(f"{US_BASE}/result/{scan_id}/")
+            if res.status_code == 200:
+                data = res.json()
+                result = {
+                    "final_url": data.get("page", {}).get("url", url),
+                    "malicious": data.get("verdicts", {}).get("overall", {}).get("malicious", False),
+                    "score": data.get("verdicts", {}).get("overall", {}).get("score", 0),
+                    "tags": data.get("verdicts", {}).get("overall", {}).get("tags", []),
+                }
+                cache.set(f"us:{url}", result)
+                return result
+            await asyncio.sleep(10)
 
     return {"error": "timeout waiting for urlscan result"}
 
 
-def google_safe_browsing(url: str) -> dict:
+async def google_safe_browsing(url: str) -> dict:
     if not GOOGLE_SAFE_BROWSING_KEY:
         return {"available": False}
 
@@ -125,7 +129,8 @@ def google_safe_browsing(url: str) -> dict:
         },
     }
     try:
-        r = httpx.post(f"{GSB_BASE}?key={GOOGLE_SAFE_BROWSING_KEY}", json=payload, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(f"{GSB_BASE}?key={GOOGLE_SAFE_BROWSING_KEY}", json=payload)
         data = r.json()
         matches = data.get("matches", [])
         result = {
@@ -140,7 +145,7 @@ def google_safe_browsing(url: str) -> dict:
     return result
 
 
-def phishtank_check(url: str) -> dict:
+async def phishtank_check(url: str) -> dict:
     if not PHISHTANK_KEY:
         return {"available": False}
 
@@ -149,12 +154,12 @@ def phishtank_check(url: str) -> dict:
         return cached
 
     try:
-        r = httpx.post(
-            PHISHTANK_BASE,
-            data={"url": url, "format": "json", "app_key": PHISHTANK_KEY},
-            headers={"User-Agent": "phishtank/veri-bot"},
-            timeout=10,
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                PHISHTANK_BASE,
+                data={"url": url, "format": "json", "app_key": PHISHTANK_KEY},
+                headers={"User-Agent": "phishtank/veri-bot"},
+            )
         data = r.json()
         entry = data.get("results", {})
         result = {
@@ -170,25 +175,25 @@ def phishtank_check(url: str) -> dict:
     return result
 
 
-def openphish_check(url: str) -> dict:
+async def openphish_check(url: str) -> dict:
     cached = cache.get("openphish:feed")
     if cached:
         feed_urls = set(cached)
     else:
         try:
-            r = httpx.get(OPENPHISH_FEED, timeout=15)
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.get(OPENPHISH_FEED)
             feed_urls = set(line.strip() for line in r.text.splitlines() if line.strip())
             cache.set("openphish:feed", list(feed_urls), ttl=3600)
         except Exception as e:
             return {"available": False, "error": str(e)}
 
-    # check exact match and domain match
     domain = _extract_domain(url)
     found = url in feed_urls or any(domain in u for u in feed_urls)
     return {"available": True, "threat_found": found}
 
 
-def abuseipdb_check(url: str) -> dict:
+async def abuseipdb_check(url: str) -> dict:
     if not ABUSEIPDB_KEY:
         return {"available": False}
 
@@ -198,12 +203,12 @@ def abuseipdb_check(url: str) -> dict:
         return cached
 
     try:
-        r = httpx.get(
-            ABUSEIPDB_BASE,
-            params={"ipAddress": domain, "maxAgeInDays": 90, "verbose": ""},
-            headers={"Key": ABUSEIPDB_KEY, "Accept": "application/json"},
-            timeout=10,
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                ABUSEIPDB_BASE,
+                params={"ipAddress": domain, "maxAgeInDays": 90, "verbose": ""},
+                headers={"Key": ABUSEIPDB_KEY, "Accept": "application/json"},
+            )
         data = r.json().get("data", {})
         result = {
             "available": True,
