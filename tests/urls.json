@@ -1,0 +1,122 @@
+[
+  {
+    "url": "http://testsafebrowsing.appspot.com/s/phishing.html",
+    "expected": "dangerous",
+    "category": "google_test",
+    "note": "Google official phishing test URL"
+  },
+  {
+    "url": "https://www.bankhapoalim.co.il",
+    "expected": "clean",
+    "category": "legit_israeli_bank",
+    "note": "Real Bank Hapoalim homepage"
+  },
+  {
+    "url": "https://www.bankleumi.co.il",
+    "expected": "clean",
+    "category": "legit_israeli_bank",
+    "note": "Real Bank Leumi homepage"
+  },
+  {
+    "url": "https://www.bituahleumi.co.il",
+    "expected": "clean",
+    "category": "legit_gov",
+    "note": "Real National Insurance Institute"
+  },
+  {
+    "url": "https://www.gov.il",
+    "expected": "clean",
+    "category": "legit_gov",
+    "note": "Real Israeli government portal"
+  },
+  {
+    "url": "https://www.israelpost.co.il",
+    "expected": "clean",
+    "category": "legit_delivery",
+    "note": "Real Israel Post"
+  },
+  {
+    "url": "http://bankhapoalim.co.il-secure-login.xyz",
+    "expected": "dangerous",
+    "category": "israeli_sms_phishing",
+    "note": "Classic Israeli SMS pattern: brand.co.il-domain.xyz"
+  },
+  {
+    "url": "http://btl.co.il-update-payment.net",
+    "expected": "dangerous",
+    "category": "israeli_sms_phishing",
+    "note": "Bituah Leumi SMS phishing pattern"
+  },
+  {
+    "url": "http://israelpost.co.il-track.top/parcel/verify",
+    "expected": "dangerous",
+    "category": "israeli_sms_phishing",
+    "note": "Israel Post delivery phishing"
+  },
+  {
+    "url": "http://hapoalim-secure-verify.top/login",
+    "expected": "dangerous",
+    "category": "brand_lookalike",
+    "note": "Hapoalim brand in suspicious TLD"
+  },
+  {
+    "url": "http://bituahleumi-payment.xyz/verify",
+    "expected": "dangerous",
+    "category": "brand_lookalike",
+    "note": "Bituah Leumi brand + suspicious TLD + verify keyword"
+  },
+  {
+    "url": "http://paypa1.com/account/update",
+    "expected": "dangerous",
+    "category": "brand_lookalike",
+    "note": "PayPal lookalike with 1->l substitution"
+  },
+  {
+    "url": "http://193.142.58.90/login/account",
+    "expected": "dangerous",
+    "category": "ip_phishing",
+    "note": "IP address used directly instead of domain"
+  },
+  {
+    "url": "http://secure-banking-update.verify-account.login.click",
+    "expected": "dangerous",
+    "category": "excessive_subdomains",
+    "note": "Excessive subdomains + suspicious TLD + phishing keywords"
+  },
+  {
+    "url": "http://arnona-iriya-telaviv-payment-update-2024.xyz/pay",
+    "expected": "dangerous",
+    "category": "israeli_keyword_phishing",
+    "note": "Long domain, arnona keyword, suspicious TLD"
+  },
+  {
+    "url": "http://misrad-habriyut-covid-update.top/confirm",
+    "expected": "dangerous",
+    "category": "gov_impersonation",
+    "note": "Health ministry impersonation"
+  },
+  {
+    "url": "https://bit.ly/3xPhishMe",
+    "expected": "suspicious",
+    "category": "shortener",
+    "note": "Shortened URL — destination unknown"
+  },
+  {
+    "url": "https://www.google.com",
+    "expected": "clean",
+    "category": "legit_global",
+    "note": "Google homepage"
+  },
+  {
+    "url": "https://www.apple.com",
+    "expected": "clean",
+    "category": "legit_global",
+    "note": "Apple homepage"
+  },
+  {
+    "url": "http://app1e-id-verify.com/signin",
+    "expected": "dangerous",
+    "category": "brand_lookalike",
+    "note": "Apple lookalike with 1->l substitution + signin keyword"
+  }
+]

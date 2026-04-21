@@ -129,8 +129,8 @@ def check_heuristics(url: str) -> dict:
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", domain):
         flags.append("כתובת IP במקום דומיין")
 
-    # excessive subdomains (3+)
-    if domain.count(".") >= 3:
+    # excessive subdomains — threshold 4 to avoid flagging www.brand.co.il
+    if domain.count(".") >= 4:
         flags.append("יותר מדי תתי-דומיינים")
 
     # suspicious TLD
@@ -148,11 +148,11 @@ def check_heuristics(url: str) -> dict:
     if domain.count("-") >= 3:
         flags.append("יותר מדי מקפים בדומיין")
 
-    # suspicious keywords in URL
+    # suspicious keywords in URL — each hit is its own flag for accurate scoring
     url_lower = url.lower()
     keyword_hits = [k for k in SUSPICIOUS_KEYWORDS if k in url_lower]
-    if keyword_hits:
-        flags.append(f"מילות מפתח חשודות: {', '.join(keyword_hits[:3])}")
+    for kw in keyword_hits[:3]:
+        flags.append(f"מילת מפתח חשודה: {kw}")
 
     # brand name in subdomain but not root (classic phishing pattern)
     parts = domain.split(".")
