@@ -1,7 +1,7 @@
 import anthropic
 from config import ANTHROPIC_KEY
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_KEY)
 
 SYSTEM = """אתה מומחה אבטחת סייבר ישראלי שתפקידו להגן על אנשים מפישינג והונאות.
 
@@ -22,7 +22,7 @@ SYSTEM = """אתה מומחה אבטחת סייבר ישראלי שתפקידו 
 אם הקישור הוא מקוצר ולא ניתן לאמת את היעד הסופי, כתוב זאת מפורשות."""
 
 
-def get_verdict(url: str, vt: dict, us: dict, domain: dict,
+async def get_verdict(url: str, vt: dict, us: dict, domain: dict,
                 gsb: dict = None, pt: dict = None, op: dict = None, abuse: dict = None,
                 certil: dict = None, final_url: str = None, was_shortened: bool = False) -> str:
     shortener_note = ""
@@ -110,7 +110,7 @@ URL סופי לאחר פתיחה: {final_url or url}
 זכור: עדיף להזהיר יתר על המידה. לעולם אל תאמר "בטוח ללחוץ".
 כלל קריטי: אל תזכיר מקורות שלא מצאו כלום — רק מה שנמצא בפועל.
 """
-    msg = client.messages.create(
+    msg = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
         system=SYSTEM,
