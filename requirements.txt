@@ -1,7 +1,7 @@
 python-telegram-bot==22.7
-anthropic
-httpx
-python-dotenv
-python-whois
-pytesseract
-Pillow
+anthropic==0.96.0
+httpx==0.28.1
+python-dotenv==1.2.2
+python-whois==0.9.6
+pytesseract==0.3.13
+Pillow==12.2.0
