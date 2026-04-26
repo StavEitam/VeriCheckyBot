@@ -1,8 +1,9 @@
 import sqlite3
 import json
 import time
+import os
 
-DB_PATH = "veri_cache.db"
+DB_PATH = os.getenv("DB_PATH", "veri_cache.db")
 TTL = 3600  # 1 hour default
 
 _db: sqlite3.Connection | None = None
