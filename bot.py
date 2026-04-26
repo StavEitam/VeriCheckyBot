@@ -73,7 +73,7 @@ async def analyze_url(url: str) -> str:
         )
 
     domain_info = {**lookalike, **age, **heuristics}
-    return get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, certil=certil, final_url=final_url, was_shortened=shortened)
+    return await get_verdict(url, vt, us, domain_info, gsb=gsb, pt=pt, op=op, abuse=abuse, certil=certil, final_url=final_url, was_shortened=shortened)
 
 
 async def _prewarm_feeds(app=None):
