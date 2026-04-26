@@ -9,6 +9,7 @@ from config import TELEGRAM_TOKEN
 from analyzer.url_checker import vt_scan, urlscan_scan, unshorten_url, is_shortener, google_safe_browsing, phishtank_check, openphish_check, abuseipdb_check, certil_check
 from analyzer.domain_intel import check_lookalike, check_domain_age, check_heuristics
 from analyzer.ocr import extract_urls_from_image
+import translator
 from translator import get_verdict
 
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +86,11 @@ async def _prewarm_feeds(app=None):
         logging.warning(f"OpenPhish prewarm failed (non-fatal): {e}")
 
 
+async def _shutdown(app=None):
+    """Close AsyncAnthropic client to prevent ResourceWarning."""
+    await translator.client.aclose()
+
+
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "שלום! אני Veri 🛡️\n\n"
@@ -138,7 +144,13 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def main():
     cache.init_db()
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(_prewarm_feeds).build()
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .post_init(_prewarm_feeds)
+        .post_shutdown(_shutdown)
+        .build()
+    )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
