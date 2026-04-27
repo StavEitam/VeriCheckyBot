@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VeriBot — Real-Time Phishing Detection</title>
+<meta name="description" content="A Telegram bot that detects phishing links in real time and responds with a clear security verdict.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050511;--bg2:#08081e;--bg3:#0c0c28;
+  --sur:rgba(255,255,255,.033);--sur2:rgba(255,255,255,.055);
+  --bdr:rgba(255,255,255,.065);--bdr2:rgba(255,255,255,.13);
+  --cyan:#00d4ff;--cyan2:#00a8cc;--cglow:rgba(0,212,255,.18);
+  --purple:#8b5cf6;--purple2:#6d3fd6;--pglow:rgba(139,92,246,.18);
+  --emerald:#10b981;--eglow:rgba(16,185,129,.15);
+  --rose:#f43f5e;--amber:#f59e0b;
+  --txt:#f1f5f9;--txt2:#94a3b8;--txt3:#475569;
+  --mono:'JetBrains Mono',monospace;
+  --r:12px;--r2:18px;--ease:cubic-bezier(.4,0,.2,1);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);overflow-x:hidden;line-height:1.6;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--purple2);border-radius:2px}
+a{text-decoration:none;color:inherit}
+
+/* ── shared bg helpers ── */
+.grid-bg{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 80% 70% at 50% 40%,#000 30%,transparent 100%)}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
+
+/* ── nav ── */
+#nav{
+  position:fixed;top:0;left:0;right:0;z-index:500;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 clamp(1.25rem,4vw,3rem);
+  background:rgba(5,5,17,.82);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  border-bottom:1px solid var(--bdr);transition:all .3s var(--ease)
+}
+.nav-logo{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:.95rem;letter-spacing:-.01em}
+.logo-icon{width:30px;height:30px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--cyan),var(--purple));display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px var(--cglow)}
+.logo-text{background:linear-gradient(135deg,#fff 0%,var(--txt2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.nav-links{display:flex;gap:1.75rem;list-style:none}
+.nav-links a{font-size:.75rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);transition:color .2s}
+.nav-links a:hover{color:var(--cyan)}
+.nav-pill{display:inline-flex;align-items:center;gap:.5rem;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.22);border-radius:30px;padding:.32rem .9rem;font-size:.75rem;font-weight:600;color:var(--cyan);transition:all .22s var(--ease);white-space:nowrap}
+.nav-pill:hover{background:rgba(0,212,255,.15);border-color:rgba(0,212,255,.45);box-shadow:0 0 22px var(--cglow)}
+@media(max-width:860px){.nav-links,.nav-pill{display:none}}
+
+/* ── layout ── */
+section{position:relative;overflow:hidden}
+.inner{max-width:1200px;margin:0 auto;position:relative;z-index:1}
+.sec-label{display:inline-flex;align-items:center;gap:.5rem;font-size:.65rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--txt3);margin-bottom:.85rem}
+.sec-label::before{content:'';width:18px;height:1px;background:currentColor;display:block}
+h2.sec-title{font-size:clamp(1.85rem,3.5vw,2.8rem);font-weight:900;line-height:1.1;letter-spacing:-.025em;margin-bottom:.65rem}
+.sec-sub{font-size:.95rem;color:var(--txt2);max-width:540px;line-height:1.8}
+.gt{background:linear-gradient(135deg,var(--cyan) 0%,var(--purple) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+/* ── buttons ── */
+.btn-p{display:inline-flex;align-items:center;gap:.65rem;background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#050511;font-weight:700;font-size:.9rem;padding:.85rem 1.8rem;border-radius:50px;transition:all .25s var(--ease);box-shadow:0 0 40px var(--cglow);white-space:nowrap}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 10px 50px var(--cglow)}
+.btn-s{display:inline-flex;align-items:center;gap:.5rem;border:1px solid var(--bdr2);color:var(--txt2);font-weight:500;font-size:.9rem;padding:.85rem 1.8rem;border-radius:50px;transition:all .25s var(--ease)}
+.btn-s:hover{border-color:rgba(255,255,255,.22);background:var(--sur);color:var(--txt)}
+
+/* ── tags ── */
+.tags{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:1.75rem}
+.tag{font-size:.67rem;font-weight:600;letter-spacing:.04em;padding:.28rem .65rem;border-radius:6px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt2)}
+.tag.c{background:rgba(0,212,255,.07);border-color:rgba(0,212,255,.2);color:var(--cyan)}
+.tag.p{background:rgba(139,92,246,.07);border-color:rgba(139,92,246,.2);color:var(--purple)}
+.tag.e{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.2);color:var(--emerald)}
+.tag.a{background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.2);color:var(--amber)}
+
+/* ── scroll fade ── */
+.fu{opacity:0;transform:translateY(28px);transition:opacity .65s var(--ease),transform .65s var(--ease)}
+.fu.v{opacity:1;transform:translateY(0)}
+.fu.d1{transition-delay:.1s}.fu.d2{transition-delay:.2s}.fu.d3{transition-delay:.3s}.fu.d4{transition-delay:.4s}
+
+/* ── pulse dot ── */
+.pdot{width:7px;height:7px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald);animation:pd 2s infinite;display:inline-block}
+@keyframes pd{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.78)}}
+
+/* ════════════════ HERO ════════════════ */
+#hero{min-height:100vh;padding:88px clamp(1.25rem,6vw,4rem) 60px;display:flex;align-items:center}
+.hero-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:3.5rem;align-items:center}
+.hero-badge{display:inline-flex;align-items:center;gap:.55rem;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.28);border-radius:30px;padding:.3rem .9rem;font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a78bfa;margin-bottom:1.5rem}
+h1.hero-h{font-size:clamp(2.8rem,6vw,5rem);font-weight:900;line-height:1.04;letter-spacing:-.035em;margin-bottom:1.4rem}
+.hero-sub{font-size:1rem;color:var(--txt2);max-width:460px;line-height:1.8;margin-bottom:2.25rem}
+.hero-note{display:block;margin-top:.45rem;font-size:.82em;color:var(--txt3);font-family:var(--mono)}
+.hero-actions{display:flex;gap:.85rem;flex-wrap:wrap;align-items:center}
+@media(max-width:860px){
+  .hero-grid{grid-template-columns:1fr}
+  .hero-text{text-align:center}
+  .tags{justify-content:center}
+  .hero-actions{justify-content:center}
+  .hero-sub{margin:0 auto 2.25rem}
+}
+
+/* ── telegram mockup ── */
+.tg-wrap{display:flex;justify-content:center;position:relative}
+.tg-halo{position:absolute;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,255,.2) 0%,transparent 65%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.tg-phone{width:315px;background:#17212b;border-radius:22px;overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06),0 0 60px rgba(0,212,255,.07);position:relative;z-index:1}
+.tg-hdr{background:#232e3c;padding:13px 15px;display:flex;align-items:center;gap:11px;border-bottom:1px solid rgba(255,255,255,.045)}
+.tg-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--cyan),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px}
+.tg-name{font-size:.83rem;font-weight:600;color:#e2eaf0}
+.tg-status{font-size:.67rem;color:#6a9baa;margin-top:1px}
+.tg-kdots{margin-left:auto;opacity:.45}
+.tg-body{min-height:340px;max-height:390px;overflow-y:auto;background:#0e1621;padding:13px 11px;display:flex;flex-direction:column;gap:7px;scroll-behavior:smooth}
+.tg-body::-webkit-scrollbar{width:2px}
+.tg-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1)}
+.tg-datesep{text-align:center;font-size:.62rem;color:#4d6b78;background:rgba(0,0,0,.25);border-radius:10px;padding:.18rem .55rem;width:fit-content;margin:0 auto 3px}
+.tg-bbl{max-width:88%;padding:9px 12px;font-size:.8rem;line-height:1.52;word-break:break-word}
+.tg-bbl.out{align-self:flex-end;background:linear-gradient(135deg,#2b5278,#1e3c5f);border-radius:13px 13px 3px 13px;color:#d9ecff}
+.tg-bbl.in{align-self:flex-start;background:#182533;border-radius:3px 13px 13px 13px;color:#d0e6f5;direction:rtl}
+.tg-time{font-size:.58rem;color:rgba(255,255,255,.3);margin-top:4px}
+.tg-bbl.out .tg-time{text-align:right}
+.url-txt{color:#5da8e0;font-family:var(--mono);font-size:.72rem;word-break:break-all}
+.vl{display:flex;gap:.4rem;align-items:flex-start;margin:.12rem 0;font-size:.78rem}
+.vi{flex-shrink:0;width:17px;text-align:center;line-height:1.5}
+.vbadge{display:inline-block;font-size:.68rem;font-weight:700;padding:.05rem .42rem;border-radius:5px;vertical-align:middle;margin:0 2px;background:rgba(244,63,94,.18);border:1px solid rgba(244,63,94,.38);color:#fca5a5}
+.tg-typing{align-self:flex-start;background:#182533;border-radius:3px 13px 13px 13px;padding:11px 14px;display:flex;gap:4px;align-items:center;width:fit-content}
+.tg-typing span{width:6px;height:6px;border-radius:50%;background:#4d6b78;animation:tb 1.3s ease-in-out infinite}
+.tg-typing span:nth-child(2){animation-delay:.18s}
+.tg-typing span:nth-child(3){animation-delay:.36s}
+@keyframes tb{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-5px);opacity:1}}
+
+/* ════════════════ HOW IT WORKS ════════════════ */
+#how{padding:100px clamp(1.25rem,6vw,4rem);background:var(--bg2)}
+.steps{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:0;align-items:start;margin-top:3.5rem}
+.step-card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r2);padding:1.75rem 1.5rem;text-align:center;position:relative;overflow:hidden;transition:border-color .3s,box-shadow .3s}
+.step-card.lit{border-color:rgba(0,212,255,.25);box-shadow:0 0 50px rgba(0,212,255,.07)}
+.step-bar{position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--purple));transform:scaleX(0);transform-origin:left;transition:transform .7s var(--ease)}
+.step-card.lit .step-bar{transform:scaleX(1)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:.85rem;font-weight:700;margin-bottom:1.1rem}
+.s1 .step-num{background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.28);color:var(--cyan)}
+.s2 .step-num{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.28);color:var(--purple)}
+.s3 .step-num{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.28);color:var(--emerald)}
+.step-icon{width:58px;height:58px;border-radius:var(--r);margin:0 auto 1.1rem;display:flex;align-items:center;justify-content:center}
+.s1 .step-icon{background:rgba(0,212,255,.07)}
+.s2 .step-icon{background:rgba(139,92,246,.07)}
+.s3 .step-icon{background:rgba(16,185,129,.07)}
+.step-card h3{font-size:1.05rem;font-weight:700;margin-bottom:.45rem}
+.step-card p{font-size:.82rem;color:var(--txt2);line-height:1.55}
+.step-detail{font-size:.68rem;letter-spacing:.05em;color:var(--txt3);margin-top:.4rem;text-transform:uppercase}
+.step-sep{display:flex;align-items:center;justify-content:center;padding:0 .35rem;margin-top:3.8rem;color:var(--txt3)}
+/* radar */
+.radar{position:relative;width:58px;height:58px;display:flex;align-items:center;justify-content:center}
+.rring{position:absolute;border-radius:50%;border:1.5px solid rgba(139,92,246,.35);top:50%;left:50%;transform:translate(-50%,-50%);animation:rp 2.2s ease-out infinite}
+.rring:nth-child(2){animation-delay:.73s}
+.rring:nth-child(3){animation-delay:1.46s}
+@keyframes rp{0%{width:8px;height:8px;opacity:.9}100%{width:58px;height:58px;opacity:0}}
+.rcore{width:9px;height:9px;border-radius:50%;background:var(--purple);box-shadow:0 0 10px var(--purple);position:relative;z-index:1}
+@media(max-width:860px){
+  .steps{grid-template-columns:1fr;gap:1rem}
+  .step-sep{transform:rotate(90deg);padding:.25rem 0;margin-top:0}
+}
+
+/* ════════════════ ARCHITECTURE ════════════════ */
+#arch{padding:100px clamp(1.25rem,6vw,4rem)}
+.arch-wrap{margin-top:3rem;display:flex;flex-direction:column;align-items:center;gap:0}
+.arch-row{display:flex;align-items:center;flex-wrap:wrap;justify-content:center}
+.anode{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:.85rem 1.05rem;text-align:center;min-width:115px;flex-shrink:0;transition:border-color .25s,box-shadow .25s}
+.anode:hover{border-color:var(--bdr2);box-shadow:0 0 28px rgba(0,212,255,.07)}
+.albl{font-size:.58rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
+.atitle{font-size:.8rem;font-weight:700;color:var(--txt)}
+.asub{font-size:.62rem;color:var(--txt3);margin-top:.18rem;font-family:var(--mono)}
+.anode.nc{border-color:rgba(0,212,255,.28);box-shadow:0 0 28px rgba(0,212,255,.09)}.anode.nc .atitle{color:var(--cyan)}
+.anode.np{border-color:rgba(139,92,246,.28);box-shadow:0 0 28px rgba(139,92,246,.09)}.anode.np .atitle{color:var(--purple)}
+.anode.ne{border-color:rgba(16,185,129,.28);box-shadow:0 0 28px rgba(16,185,129,.07)}.anode.ne .atitle{color:var(--emerald)}
+.aarr{flex-shrink:0;padding:0 .4rem;display:flex;align-items:center;color:var(--txt3)}
+.adn{display:flex;justify-content:center;padding:.15rem 0}
+.awaves{display:flex;gap:1.25rem;align-items:stretch;flex-wrap:wrap;justify-content:center}
+.awave{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:.9rem 1.05rem;min-width:195px;flex:1;max-width:255px}
+.awave.wc{border-color:rgba(0,212,255,.22)}.awave.wp{border-color:rgba(139,92,246,.22)}
+.wlbl{font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.6rem}
+.wc .wlbl{color:var(--cyan)}.wp .wlbl{color:var(--purple)}
+.witem{display:flex;align-items:center;gap:.45rem;font-size:.72rem;color:var(--txt2);padding:.18rem 0}
+.wdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.wc .wdot{background:var(--cyan)}.wp .wdot{background:var(--purple)}
+.adiamond{display:flex;align-items:center;padding:0 .9rem;flex-shrink:0}
+.diamond-box{width:54px;height:54px;transform:rotate(45deg);background:var(--sur2);border:1px solid var(--bdr2);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.diamond-box span{transform:rotate(-45deg);font-size:.49rem;font-weight:800;color:var(--txt2);text-align:center;line-height:1.3;display:block}
+.sc-note{font-size:.59rem;color:var(--rose);font-weight:700;letter-spacing:.04em;text-align:center;margin-top:.45rem}
+
+/* ════════════════ SOURCES ════════════════ */
+#sources{padding:100px clamp(1.25rem,6vw,4rem);background:var(--bg2)}
+.src-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:.9rem;margin-top:2.75rem}
+.src-card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r2);padding:1.4rem;transition:all .25s var(--ease);position:relative;overflow:hidden;cursor:default}
+.src-card::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s;background:radial-gradient(circle at top right,rgba(0,212,255,.12),transparent 65%)}
+.src-card:hover::before{opacity:1}
+.src-card:hover{border-color:rgba(0,212,255,.18);transform:translateY(-3px);box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.src-ico{width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:.9rem;background:var(--sur2);border:1px solid var(--bdr)}
+.src-name{font-size:.88rem;font-weight:700;margin-bottom:.3rem}
+.src-desc{font-size:.74rem;color:var(--txt2);line-height:1.55}
+.src-bdg{display:inline-block;margin-top:.6rem;font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:20px;padding:.14rem .5rem;background:rgba(16,185,129,.09);border:1px solid rgba(16,185,129,.22);color:var(--emerald)}
+.src-bdg.w{background:rgba(245,158,11,.09);border-color:rgba(245,158,11,.22);color:var(--amber)}
+.src-bdg.r{background:rgba(244,63,94,.09);border-color:rgba(244,63,94,.22);color:var(--rose)}
+.brand-row{margin-top:1.75rem;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r2);padding:1.35rem 1.75rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
+.bc-lbl{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3);margin-bottom:.3rem}
+.bc-title{font-size:.85rem;font-weight:700;color:var(--txt)}
+.bc-exs{display:flex;flex-wrap:wrap;gap:.35rem;flex:1}
+.bc-ex{font-family:var(--mono);font-size:.7rem;background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.18);color:#fca5a5;padding:.18rem .48rem;border-radius:5px}
+.bc-ex em{color:var(--rose);font-style:normal;font-weight:700}
+.bc-note{font-size:.72rem;color:var(--txt3);max-width:185px;line-height:1.5}
+
+/* ════════════════ PRIVACY ════════════════ */
+#privacy{padding:80px clamp(1.25rem,6vw,4rem)}
+.priv-box{max-width:840px;margin:0 auto;display:grid;grid-template-columns:auto 1fr;gap:2.75rem;align-items:start}
+.priv-ico{width:86px;height:86px;border-radius:var(--r2);flex-shrink:0;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);display:flex;align-items:center;justify-content:center}
+.priv-body h3{font-size:1.35rem;font-weight:800;margin-bottom:.65rem}
+.priv-body>p{color:var(--txt2);line-height:1.75;font-size:.9rem}
+.priv-pts{display:flex;flex-direction:column;gap:.42rem;margin-top:.9rem}
+.priv-pt{display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--txt2)}
+.priv-pt svg{color:var(--emerald);flex-shrink:0}
+@media(max-width:640px){.priv-box{grid-template-columns:1fr}.priv-ico{margin:0 auto}}
+
+/* ════════════════ CTA ════════════════ */
+#cta{padding:120px clamp(1.25rem,6vw,4rem);text-align:center}
+.cta-blob{position:absolute;width:700px;height:400px;background:radial-gradient(ellipse,rgba(0,212,255,.1) 0%,transparent 65%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+#cta h2{font-size:clamp(2rem,4vw,3.2rem);font-weight:900;letter-spacing:-.025em;max-width:600px;margin:0 auto .75rem}
+.cta-sub{font-size:.95rem;color:var(--txt2);max-width:380px;margin:0 auto 2.25rem;line-height:1.8}
+.cta-handle{display:inline-flex;align-items:center;gap:.45rem;margin-top:1.1rem;font-family:var(--mono);font-size:.77rem;color:var(--txt3)}
+.cta-handle svg{opacity:.5}
+
+/* ════════════════ FOOTER ════════════════ */
+footer{border-top:1px solid var(--bdr);padding:1.75rem clamp(1.25rem,4vw,3rem);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
+.ft-logo{font-size:.82rem;font-weight:700;color:var(--txt3)}
+.ft-copy{font-size:.72rem;color:var(--txt3)}
+.ft-links{display:flex;gap:1.4rem}
+.ft-links a{font-size:.72rem;color:var(--txt3);transition:color .2s}
+.ft-links a:hover{color:var(--cyan)}
+@media(max-width:600px){footer{flex-direction:column;text-align:center}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="#" class="nav-logo">
+    <div class="logo-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z" fill="white"/><path d="M9 12l2 2 4-4" stroke="#05050f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <span class="logo-text">VeriBot</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how">How It Works</a></li>
+    <li><a href="#arch">Architecture</a></li>
+    <li><a href="#sources">Sources</a></li>
+    <li><a href="#privacy">Privacy</a></li>
+  </ul>
+  <a href="https://t.me/VeriCheckyBot" class="nav-pill" target="_blank" rel="noopener">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.89 8.22-1.97 9.28c-.14.66-.54.82-1.08.51l-3-2.21-1.45 1.39c-.16.16-.3.3-.6.3l.21-3.05 5.56-5.02c.24-.21-.05-.33-.37-.12L6.28 13.6l-2.96-.92c-.64-.2-.66-.64.14-.95l11.57-4.46c.54-.2 1.01.13.86.95z"/></svg>
+    Try @VeriCheckyBot
+  </a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="grid-bg"></div>
+  <div class="blob" style="width:560px;height:560px;background:radial-gradient(circle,rgba(0,212,255,.07),transparent 65%);top:-12%;right:-8%"></div>
+  <div class="blob" style="width:500px;height:500px;background:radial-gradient(circle,rgba(139,92,246,.07),transparent 65%);bottom:-8%;left:-6%"></div>
+  <div class="inner hero-grid">
+    <div class="hero-text">
+      <div class="hero-badge"><span class="pdot"></span>&nbsp;Real-Time · Phishing Detection · Hebrew AI</div>
+      <h1 class="hero-h">Smart Phishing<br>Detection.<br><span class="gt">Instant Verdict.</span></h1>
+      <p class="hero-sub">Send any suspicious link, message, or screenshot to the bot. Get a complete security verdict in seconds — risk level, findings, and recommended action.
+        <span class="hero-note">No signup. No app. Stateless by design.</span>
+      </p>
+      <div class="hero-actions">
+        <a href="https://t.me/VeriCheckyBot" class="btn-p" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.89 8.22-1.97 9.28c-.14.66-.54.82-1.08.51l-3-2.21-1.45 1.39c-.16.16-.3.3-.6.3l.21-3.05 5.56-5.02c.24-.21-.05-.33-.37-.12L6.28 13.6l-2.96-.92c-.64-.2-.66-.64.14-.95l11.57-4.46c.54-.2 1.01.13.86.95z"/></svg>
+          Try Now — @VeriCheckyBot
+        </a>
+        <a href="#how" class="btn-s">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+          How It Works
+        </a>
+      </div>
+      <div class="tags">
+        <span class="tag c">Async Pipeline</span>
+        <span class="tag p">Multi-Phase Analysis</span>
+        <span class="tag e">Hebrew AI Verdict</span>
+        <span class="tag a">OCR · PSM 11</span>
+        <span class="tag">6 Intel Sources</span>
+        <span class="tag">Brand Lookalike</span>
+        <span class="tag">Smart Cache</span>
+      </div>
+    </div>
+    <div class="tg-wrap">
+      <div class="tg-halo"></div>
+      <div class="tg-phone">
+        <div class="tg-hdr">
+          <div class="tg-av">🛡️</div>
+          <div>
+            <div class="tg-name">VeriBot</div>
+            <div class="tg-status">bot · online</div>
+          </div>
+          <div class="tg-kdots">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+          </div>
+        </div>
+        <div class="tg-body" id="tgBody">
+          <div class="tg-datesep">Today · 14:32</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="inner" style="padding:100px 0">
+    <div class="sec-label fu">The Flow</div>
+    <h2 class="sec-title fu d1">How <span class="gt">VeriBot</span> Works</h2>
+    <p class="sec-sub fu d2">A fully automated three-stage pipeline — from the moment you send a message to a complete security verdict.</p>
+    <div class="steps fu d3">
+      <div class="step-card s1">
+        <div class="step-num">01</div>
+        <div class="step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>Send</h3>
+        <p>Drop a text URL, a full message, or a screenshot from WhatsApp, SMS, or email.</p>
+        <div class="step-detail">URL · Photo · Screenshot</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-sep">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step-card s2">
+        <div class="step-num">02</div>
+        <div class="step-icon">
+          <div class="radar"><div class="rring"></div><div class="rring"></div><div class="rring"></div><div class="rcore"></div></div>
+        </div>
+        <h3>Analysis</h3>
+        <p>A two-wave async pipeline cross-references 6 independent intel sources with smart short-circuit logic.</p>
+        <div class="step-detail">Async Pipeline · Heuristics Engine</div>
+        <div class="step-bar"></div>
+      </div>
+      <div class="step-sep">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step-card s3">
+        <div class="step-num">03</div>
+        <div class="step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <h3>Verdict</h3>
+        <p>Claude AI synthesizes all signals into a clear Hebrew verdict — target, risk level, findings, and action.</p>
+        <div class="step-detail">Claude AI · Hebrew NLP · Risk Score</div>
+        <div class="step-bar"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="arch" style="padding:100px clamp(1.25rem,6vw,4rem);background:var(--bg2)">
+  <div class="inner">
+    <div class="sec-label fu">Under the Hood</div>
+    <h2 class="sec-title fu d1">Async <span class="gt">Pipeline</span> Architecture</h2>
+    <p class="sec-sub fu d2">Every request runs through a dual-wave pipeline. Wave 1 fires fast parallel checks (~1-2s each) and short-circuits immediately on confirmed threat. Wave 2 adds deep sandbox analysis — only when Wave 1 finds no definitive answer.</p>
+    <div class="arch-wrap fu d3">
+      <div class="arch-row">
+        <div class="anode nc"><div class="albl">Input</div><div class="atitle">Message / Photo</div><div class="asub">Telegram Handler</div></div>
+        <div class="aarr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="anode"><div class="albl">Extraction</div><div class="atitle">URL / OCR</div><div class="asub">Regex · PSM 11 · Binarize</div></div>
+        <div class="aarr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="anode"><div class="albl">Pre-Process</div><div class="atitle">Unshorten</div><div class="asub">bit.ly · t.co · did.li</div></div>
+        <div class="aarr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="anode"><div class="albl">Cache</div><div class="atitle">SQLite TTL</div><div class="asub">1-hour · 6 key types</div></div>
+      </div>
+      <div class="adn">
+        <svg width="18" height="28" viewBox="0 0 18 28" fill="none"><path d="M9 0v22" stroke="var(--txt3)" stroke-width="1.5" stroke-linecap="round"/><path d="M3 17l6 9 6-9" stroke="var(--txt3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="awaves">
+        <div class="awave wc">
+          <div class="wlbl">Wave 1 — Fast (~1-2s each)</div>
+          <div class="witem"><span class="wdot"></span>Google Safe Browsing</div>
+          <div class="witem"><span class="wdot"></span>PhishTank</div>
+          <div class="witem"><span class="wdot"></span>OpenPhish Feed</div>
+          <div class="witem"><span class="wdot"></span>AbuseIPDB</div>
+          <div class="witem"><span class="wdot"></span>Brand Lookalike · Heuristics</div>
+        </div>
+        <div class="adiamond">
+          <div>
+            <div class="diamond-box"><span>THREAT<br>FOUND?</span></div>
+            <div class="sc-note">YES → SHORT-CIRCUIT</div>
+          </div>
+        </div>
+        <div class="awave wp">
+          <div class="wlbl">Wave 2 — Deep (15-70s)</div>
+          <div class="witem"><span class="wdot"></span>VirusTotal API v3</div>
+          <div class="witem"><span class="wdot"></span>URLScan.io async poll</div>
+          <div class="witem"><span class="wdot"></span>WHOIS Domain Age</div>
+          <div class="witem" style="color:var(--txt3);font-size:.66rem;margin-top:.22rem;border-top:1px solid var(--bdr);padding-top:.32rem">Skipped if Wave 1 confirms threat</div>
+        </div>
+      </div>
+      <div class="adn">
+        <svg width="18" height="28" viewBox="0 0 18 28" fill="none"><path d="M9 0v22" stroke="var(--txt3)" stroke-width="1.5" stroke-linecap="round"/><path d="M3 17l6 9 6-9" stroke="var(--txt3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="arch-row">
+        <div class="anode np" style="min-width:148px"><div class="albl">AI Model</div><div class="atitle">Claude Haiku</div><div class="asub">claude-haiku-4-5</div></div>
+        <div class="aarr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        <div class="anode ne" style="min-width:148px"><div class="albl">Output</div><div class="atitle">Hebrew Verdict</div><div class="asub">Risk · Findings · Action</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOURCES -->
+<section id="sources" style="padding:100px clamp(1.25rem,6vw,4rem)">
+  <div class="inner">
+    <div class="sec-label fu">Intelligence Network</div>
+    <h2 class="sec-title fu d1">6 Independent <span class="gt">Intel Sources</span></h2>
+    <p class="sec-sub fu d2">Every URL is cross-referenced against six independent engines in parallel. Each returns a different signal; Claude synthesizes them into a single clear verdict.</p>
+    <div class="src-grid">
+      <div class="src-card fu">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="var(--cyan)" stroke-width="1.5"/><path d="M8 12l3 3 5-5" stroke="var(--cyan)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="src-name">VirusTotal</div>
+        <div class="src-desc">87+ antivirus and scanning engines. Returns malicious / suspicious / harmless engine counts per URL.</div>
+        <span class="src-bdg w">Wave 2 · Deep</span>
+      </div>
+      <div class="src-card fu d1">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3L5 7.5v5.5C5 17.1 8.14 21.5 12 23c3.86-1.5 7-5.9 7-10V7.5L12 3z" stroke="var(--emerald)" stroke-width="1.5" fill="none" stroke-linejoin="round"/></svg></div>
+        <div class="src-name">Google Safe Browsing</div>
+        <div class="src-desc">API v4 — Google's global database of phishing, malware, and social engineering URLs.</div>
+        <span class="src-bdg">Wave 1 · Fast</span>
+      </div>
+      <div class="src-card fu d2">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="var(--purple)" stroke-width="1.5"/><path d="M16.5 16.5l4 4" stroke="var(--purple)" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+        <div class="src-name">URLScan.io</div>
+        <div class="src-desc">Cloud sandbox — analyzes redirect chains, screenshots, final landing URL, and independent risk score.</div>
+        <span class="src-bdg w">Wave 2 · 15-70s</span>
+      </div>
+      <div class="src-card fu d1">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="var(--amber)" stroke-width="1.5"/><path d="M12 8v4m0 4h.01" stroke="var(--amber)" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+        <div class="src-name">PhishTank</div>
+        <div class="src-desc">Community-verified crowdsource database of active phishing URLs, confirmed by the security community.</div>
+        <span class="src-bdg">Wave 1 · Fast</span>
+      </div>
+      <div class="src-card fu d2">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="var(--rose)" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
+        <div class="src-name">OpenPhish</div>
+        <div class="src-desc">Real-time phishing feed updated continuously from independent threat intelligence sources worldwide.</div>
+        <span class="src-bdg r">Real-time Feed</span>
+      </div>
+      <div class="src-card fu d3">
+        <div class="src-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="var(--cyan)" stroke-width="1.5"/><path d="M9 9h6M9 12h6M9 15h4" stroke="var(--cyan)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="src-name">AbuseIPDB</div>
+        <div class="src-desc">IP reputation engine — identifies servers with known history of malicious activity, spam, and attacks.</div>
+        <span class="src-bdg">Wave 1 · Fast</span>
+      </div>
+    </div>
+    <div class="brand-row fu">
+      <div style="flex-shrink:0">
+        <div class="bc-lbl">Built-in Engine</div>
+        <div class="bc-title">Brand Lookalike Detection</div>
+      </div>
+      <div class="bc-exs">
+        <span class="bc-ex">paypa<em>0</em>.com</span>
+        <span class="bc-ex">app<em>1</em>e.com</span>
+        <span class="bc-ex"><em>vv</em>hatsapp.com</span>
+        <span class="bc-ex">n<em>3</em>tflix.com</span>
+        <span class="bc-ex">hapo<em>a1</em>im.co.il</span>
+      </div>
+      <div class="bc-note">Character substitution engine monitors 16+ brands including Hapoalim, Leumi, PayPal, Apple, Google, Amazon</div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIVACY -->
+<section id="privacy" style="padding:80px clamp(1.25rem,6vw,4rem);background:var(--bg2)">
+  <div class="inner">
+    <div class="priv-box fu">
+      <div class="priv-ico">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z" stroke="var(--emerald)" stroke-width="1.4" stroke-linejoin="round" fill="none"/><path d="M9 12l2 2 4-4" stroke="var(--emerald)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="priv-body">
+        <h3>Stateless by Design</h3>
+        <p>VeriBot stores no messages, logs no users, and builds no profiles. Every request is handled in complete isolation — the architecture enforces privacy, not just a policy.</p>
+        <div class="priv-pts">
+          <div class="priv-pt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Zero message logging — nothing is persisted to disk</div>
+          <div class="priv-pt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>SQLite cache stores URL hashes only — never content</div>
+          <div class="priv-pt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>1-hour TTL — cache entries expire automatically</div>
+          <div class="priv-pt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>No user identity stored — stateless per message</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="grid-bg"></div>
+  <div class="cta-blob"></div>
+  <div class="blob" style="width:450px;height:320px;background:radial-gradient(ellipse,rgba(139,92,246,.09),transparent 65%);top:40%;left:28%;transform:translate(-50%,-50%)"></div>
+  <div class="inner" style="position:relative;z-index:1;text-align:center">
+    <div class="hero-badge fu" style="display:inline-flex;margin-bottom:1.4rem"><span class="pdot"></span>&nbsp;Live · Free · No signup required</div>
+    <h2 class="sec-title fu d1" style="max-width:560px;margin:0 auto .75rem">Got a suspicious link?<br><span class="gt">Send it to us.</span></h2>
+    <p class="cta-sub fu d2">You'll get a complete security verdict in seconds — risk level, what was found, and what to do next.</p>
+    <a href="https://t.me/VeriCheckyBot" class="btn-p fu d3" target="_blank" rel="noopener" style="display:inline-flex;font-size:.95rem;padding:.95rem 2.4rem">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.89 8.22-1.97 9.28c-.14.66-.54.82-1.08.51l-3-2.21-1.45 1.39c-.16.16-.3.3-.6.3l.21-3.05 5.56-5.02c.24-.21-.05-.33-.37-.12L6.28 13.6l-2.96-.92c-.64-.2-.66-.64.14-.95l11.57-4.46c.54-.2 1.01.13.86.95z"/></svg>
+      Open in Telegram
+    </a>
+    <div class="cta-handle fu d4">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.89 8.22-1.97 9.28c-.14.66-.54.82-1.08.51l-3-2.21-1.45 1.39c-.16.16-.3.3-.6.3l.21-3.05 5.56-5.02c.24-.21-.05-.33-.37-.12L6.28 13.6l-2.96-.92c-.64-.2-.66-.64.14-.95l11.57-4.46c.54-.2 1.01.13.86.95z"/></svg>
+      @VeriCheckyBot
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft-logo">VeriBot · Real-Time Phishing Detection</div>
+  <div class="ft-copy">Built with Python · Anthropic Claude · 6 Intel Sources</div>
+  <div class="ft-links">
+    <a href="#how">How It Works</a>
+    <a href="#arch">Architecture</a>
+    <a href="#sources">Sources</a>
+    <a href="https://t.me/VeriCheckyBot" target="_blank" rel="noopener">Try the Bot ↗</a>
+  </div>
+</footer>
+
+<script>
+/* ── Telegram Chat Animation ── */
+const tgBody = document.getElementById('tgBody');
+
+const CHAT = [
+  {
+    at: 700, type: 'out', time: '14:32',
+    html: '<span class="url-txt">https://paypa1-secure-update.co.il/login</span>'
+  },
+  { at: 1500, type: 'typing' },
+  {
+    at: 3300, type: 'in', time: '14:32',
+    html:
+      '<div class="vl"><span class="vi">🔗</span><span><strong>יעד הקישור:</strong> paypa1-secure-update.co.il</span></div>' +
+      '<div class="vl"><span class="vi">⚠️</span><span><strong>רמת סיכון:</strong> <span class="vbadge">גבוהה</span></span></div>' +
+      '<div class="vl"><span class="vi">📋</span><span><strong>ממצאים:</strong> זוהתה חיקוי של PayPal. הדומיין נוצר לפני 4 ימים. VirusTotal: 34/87. URLScan risk: 85/100.</span></div>' +
+      '<div class="vl" style="margin-top:.28rem"><span class="vi">🛑</span><span><strong>המלצה:</strong> אל תלחץ. זוהי הונאת פישינג. דווח לבנק.</span></div>'
+  }
+];
+
+function animIn(el) {
+  el.style.cssText += 'opacity:0;transform:translateY(7px);transition:opacity .32s ease,transform .32s ease;';
+  tgBody.appendChild(el);
+  tgBody.scrollTop = tgBody.scrollHeight;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(0)';
+  }));
+}
+
+function makeBubble(cfg) {
+  if (cfg.type === 'typing') {
+    const el = document.createElement('div');
+    el.className = 'tg-typing';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    return el;
+  }
+  const wrap = document.createElement('div');
+  const b = document.createElement('div');
+  b.className = 'tg-bbl ' + cfg.type;
+  b.innerHTML = cfg.html + '<div class="tg-time">' + cfg.time + '</div>';
+  wrap.appendChild(b);
+  return wrap;
+}
+
+function runChat() {
+  Array.from(tgBody.children).forEach(c => { if (!c.classList.contains('tg-datesep')) c.remove(); });
+  let typingEl = null;
+  CHAT.forEach(cfg => {
+    setTimeout(() => {
+      if (cfg.type === 'typing') {
+        typingEl = makeBubble(cfg);
+        animIn(typingEl);
+      } else {
+        if (typingEl) {
+          const t = typingEl; typingEl = null;
+          t.style.opacity = '0';
+          setTimeout(() => { t.remove(); animIn(makeBubble(cfg)); }, 290);
+        } else {
+          animIn(makeBubble(cfg));
+        }
+      }
+    }, cfg.at);
+  });
+  setTimeout(runChat, 9000);
+}
+
+runChat();
+
+/* ── Scroll Fade ── */
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('v'); });
+}, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.fu').forEach(el => io.observe(el));
+
+/* ── Step card activation ── */
+const stepIo = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting) {
+    document.querySelectorAll('.step-card').forEach((c, i) => {
+      setTimeout(() => c.classList.add('lit'), i * 220);
+    });
+    stepIo.disconnect();
+  }
+}, { threshold: 0.35 });
+const stepsEl = document.querySelector('.steps');
+if (stepsEl) stepIo.observe(stepsEl);
+
+/* ── Nav scroll ── */
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  const s = window.scrollY > 60;
+  nav.style.background = s ? 'rgba(5,5,17,.97)' : 'rgba(5,5,17,.82)';
+  nav.style.borderBottomColor = s ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.065)';
+}, { passive: true });
+</script>
+</body>
+</html>
