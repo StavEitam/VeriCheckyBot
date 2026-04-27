@@ -1,7 +1,7 @@
 import re
 import io
 import logging
-from PIL import Image, ImageEnhance
+from PIL import Image
 import pytesseract
 
 logger = logging.getLogger(__name__)
@@ -37,8 +37,9 @@ def _preprocess(img: Image.Image) -> Image.Image:
     if avg_brightness < 128:
         img = img.point(lambda p: 255 - p)
 
-    img = ImageEnhance.Contrast(img).enhance(2.5)
-    img = ImageEnhance.Sharpness(img).enhance(2.0)
+    # Binarize to pure black/white — blue hyperlinks (#007AFF) become gray(154) after
+    # inversion; threshold at 170 maps them to black so Tesseract reads them cleanly
+    img = img.point(lambda p: 255 if p > 170 else 0)
     return img
 
 
