@@ -17,9 +17,9 @@ _URL_RE = re.compile(
     r"[a-zA-Z]{2,8}/[^\s\"'<>]+"
 )
 
-# PSM 6: single uniform text block — best for chat screenshots
+# PSM 11: sparse text — finds text anywhere in image, needed for chat/SMS bubble layouts
 # OEM 3: LSTM neural net engine
-_TESS_CONFIG = "--oem 3 --psm 6"
+_TESS_CONFIG = "--oem 3 --psm 11"
 _MIN_WIDTH = 1200  # Tesseract accuracy drops below ~300 DPI equivalent
 
 
