@@ -58,6 +58,7 @@ Bot replies to user in Hebrew
 | Caching | SQLite (via cache.py) |
 | Secrets management | python-dotenv (.env file) |
 | Runtime | Python 3.11+, venv |
+| Cloud deployment | Railway (Docker worker) |
 
 ---
 
@@ -162,7 +163,7 @@ Requires **Tesseract** installed on the system:
   - `config.py`, `cache.py`, `translator.py`, `bot.py`
   - `analyzer/url_checker.py`, `analyzer/domain_intel.py`, `analyzer/ocr.py`
 - [ ] Step 3 — Testing: run locally, test with real URLs, verify Hebrew output
-- [ ] Step 4 — Deploy to Render (free tier, always-on)
+- [x] Step 4 — Deploy to Railway (Docker worker, always-on)
 - [ ] Step 5 — (Optional) Add group chat support, rate limiting, /report command
 
 ---
@@ -181,6 +182,6 @@ Requires **Tesseract** installed on the system:
 
 1. **Test locally** — run `python bot.py`, send real suspicious URLs
 2. **Tune Hebrew prompt** — adjust Claude system prompt if verdicts feel off
-3. **Deploy to Render** — free web service, add `render.yaml` or just set start command to `python bot.py`
+3. **Deploy to Railway** — Docker worker, connected to GitHub repo, set env vars in Railway dashboard
 4. **Add error resilience** — retry logic for URLScan timeouts
 5. **Group chat support** — respond only when bot is @mentioned
