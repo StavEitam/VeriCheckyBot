@@ -218,19 +218,25 @@ Key rules baked into the Claude prompt:
 
 ---
 
-## Deployment (Render)
+## Deployment (Google Cloud — Always Free)
 
-1. Push to GitHub
-2. Create a new **Web Service** on [render.com](https://render.com) (free tier)
-3. Set start command: `python bot.py`
-4. Add all `.env` keys as environment variables in the Render dashboard
-5. Deploy — the bot will poll Telegram continuously
+Hosted on a **Google Cloud e2-micro VM** (us-central1) — permanently free tier.
+
+```bash
+# On the VM:
+git clone https://github.com/StavEitam/VeriCheckyBot.git && cd VeriCheckyBot
+python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+# Create .env with API keys, then:
+python3 bot.py
+```
+
+To keep the bot running after logout, use systemd or `nohup python3 bot.py &`.
 
 ---
 
 ## Roadmap
 
-- [ ] Deploy to Render (free tier, always-on)
+- [x] Deploy to Google Cloud e2-micro (free tier, always-on)
 - [ ] Retry logic for URLScan timeouts
 - [ ] Group chat support (respond only when @mentioned)
 - [ ] Per-user rate limiting
